@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CuidaMe — Sistema de Emergencia</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+  --blue:#58a6ff;--blue-d:#1f6feb;--green:#3fb950;--orange:#f78166;
+  --purple:#bc8cff;--red:#f85149;--yellow:#e3b341;
+  --text:#e6edf3;--muted:#8b949e;--dim:#484f58;--r:12px;
+}
+body{font-family:'Sora',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100svh;display:flex;flex-direction:column;align-items:center;
+  padding:20px 16px 60px;overflow-x:hidden;position:relative;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 20% 20%,rgba(31,111,235,.1) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 30% at 80% 80%,rgba(57,211,83,.06) 0%,transparent 60%);}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);
+  padding:12px 20px;border-radius:12px;font-size:.82rem;font-weight:500;
+  z-index:999;max-width:360px;text-align:center;transition:transform .4s cubic-bezier(.34,1.56,.64,1);
+  box-shadow:0 8px 32px rgba(0,0,0,.4);background:var(--surface2);
+  border:1px solid var(--border);color:var(--text);pointer-events:none;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.ok{background:#0d2818;border-color:rgba(63,185,80,.4);color:var(--green);}
+#toast.err{background:#2d1010;border-color:rgba(248,81,73,.4);color:var(--red);}
+
+/* ── OVERLAY / MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);
+  display:grid;place-items:center;padding:20px;z-index:200;opacity:0;
+  pointer-events:none;transition:opacity .25s;}
+.overlay.show{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:28px 24px;width:100%;max-width:380px;
+  transform:translateY(20px) scale(.97);transition:transform .3s cubic-bezier(.34,1.56,.64,1);}
+.overlay.show .modal{transform:translateY(0) scale(1);}
+.modal h3{font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:8px;}
+.modal p{font-size:.83rem;color:var(--muted);line-height:1.6;margin-bottom:20px;}
+.modal-btns{display:flex;gap:10px;}
+.modal-btns button{flex:1;padding:12px;border-radius:10px;font-family:inherit;
+  font-size:.85rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.btn-cancel{background:var(--surface2);color:var(--muted);}
+.btn-blue{background:var(--blue-d);color:white;}
+.btn-red{background:#8b1a1a;color:white;}
+
+/* ── PIN ── */
+.pin-row{display:flex;gap:10px;justify-content:center;margin-bottom:16px;}
+.pin-d{width:50px;height:58px;background:var(--surface2);border:1.5px solid var(--border);
+  border-radius:12px;font-size:1.4rem;font-weight:700;text-align:center;
+  font-family:monospace;color:var(--text);outline:none;transition:border-color .2s;}
+.pin-d:focus{border-color:var(--purple);}
+.pin-d.err{border-color:var(--red);}
+#pinError{font-size:.78rem;color:var(--red);text-align:center;margin-bottom:12px;display:none;}
+#pinError.show{display:block;}
+
+/* ── HEADER ── */
+.header{width:100%;max-width:480px;display:flex;align-items:center;
+  justify-content:space-between;margin-bottom:20px;position:relative;z-index:2;
+  animation:fadeUp .5s ease both;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand-icon{width:38px;height:38px;border-radius:10px;
+  background:linear-gradient(135deg,#1f6feb,#58a6ff);
+  display:grid;place-items:center;box-shadow:0 0 20px rgba(88,166,255,.3);}
+.brand-icon svg{width:20px;height:20px;fill:white;}
+.brand-name{font-size:1.1rem;font-weight:700;letter-spacing:-.02em;}
+.brand-name span{color:var(--blue);}
+.live-badge{display:flex;align-items:center;gap:5px;background:rgba(63,185,80,.1);
+  border:1px solid rgba(63,185,80,.3);color:var(--green);font-size:.65rem;
+  font-weight:600;padding:4px 10px;border-radius:20px;letter-spacing:.06em;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+  display:inline-block;animation:blink 1.5s ease infinite;}
+
+/* ── CALM CARD ── */
+.calm-card{width:100%;max-width:480px;
+  background:linear-gradient(135deg,#1f3a5f,#1a2744 60%,#162032);
+  border:1px solid rgba(88,166,255,.2);border-radius:20px;padding:28px 24px;
+  text-align:center;margin-bottom:16px;position:relative;overflow:hidden;z-index:2;
+  box-shadow:0 0 40px rgba(31,111,235,.12);animation:fadeUp .6s .1s ease both;}
+.calm-card::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;
+  border-radius:50%;background:radial-gradient(circle,rgba(88,166,255,.12) 0%,transparent 70%);}
+.calm-pulse{width:56px;height:56px;border-radius:50%;background:rgba(88,166,255,.15);
+  border:1px solid rgba(88,166,255,.3);display:grid;place-items:center;
+  margin:0 auto 16px;animation:heartbeat 2s ease infinite;position:relative;z-index:1;}
+.calm-pulse svg{width:26px;height:26px;fill:var(--blue);}
+.calm-card h2{font-family:'Playfair Display',serif;font-size:1.5rem;line-height:1.2;
+  color:white;margin-bottom:10px;position:relative;z-index:1;}
+.calm-card h2 em{font-style:italic;color:#93c5fd;}
+.calm-card p{font-size:.85rem;line-height:1.6;color:rgba(255,255,255,.6);
+  font-weight:300;position:relative;z-index:1;}
+
+/* ── DIVIDER ── */
+.section-div{width:100%;max-width:480px;display:flex;align-items:center;gap:10px;
+  margin:16px 0 10px;z-index:2;}
+.section-div span{font-size:.68rem;font-weight:600;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;}
+.section-div::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── ACTION BUTTONS ── */
+.action-btn{width:100%;max-width:480px;display:flex;align-items:center;gap:14px;
+  padding:15px 18px;border:1px solid var(--border);border-radius:var(--r);
+  background:var(--surface);cursor:pointer;font-family:inherit;font-size:.9rem;
+  font-weight:500;color:var(--text);text-align:left;margin-bottom:10px;
+  transition:all .2s;position:relative;z-index:2;}
+.action-btn:hover{background:var(--surface2);transform:translateY(-1px);}
+.action-btn:active{transform:scale(.98);}
+.action-btn.disabled{opacity:.45;cursor:not-allowed;pointer-events:none;}
+.btn-ico{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;
+  flex-shrink:0;font-size:1.1rem;}
+.btn-text{flex:1;}
+.btn-sub{display:block;font-size:.72rem;font-weight:400;color:var(--muted);margin-top:2px;}
+.btn-chevron{color:var(--dim);font-size:.9rem;flex-shrink:0;}
+.lock-pill{font-size:.6rem;font-weight:700;padding:3px 8px;border-radius:20px;flex-shrink:0;}
+.lock-pill.locked{background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.3);}
+.lock-pill.open{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);}
+
+/* ── GPS WARN ── */
+#gpsWarn{width:100%;max-width:480px;background:rgba(227,179,65,.08);
+  border:1px solid rgba(227,179,65,.3);border-radius:var(--r);padding:12px 16px;
+  font-size:.8rem;color:var(--yellow);font-weight:500;display:none;margin-bottom:10px;z-index:2;}
+#gpsWarn.show{display:block;}
+#gpsWarn span{display:block;font-size:.72rem;color:rgba(227,179,65,.7);margin-top:3px;font-weight:300;}
+
+/* ── INFO PANELS ── */
+.info-panel{width:100%;max-width:480px;background:var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:20px;
+  display:none;margin-bottom:10px;z-index:2;animation:fadeUp .4s ease both;}
+.info-panel.visible{display:block;}
+.panel-title{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.1em;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.info-row{display:flex;justify-content:space-between;align-items:center;
+  padding:9px 0;border-bottom:1px solid rgba(48,54,61,.6);font-size:.85rem;}
+.info-row:last-child{border-bottom:none;}
+.info-row label{color:var(--muted);font-size:.75rem;font-weight:500;}
+.info-row value{font-weight:500;color:var(--text);text-align:right;max-width:65%;}
+.chip-red{font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:20px;
+  background:rgba(248,81,73,.15);color:var(--red);border:1px solid rgba(248,81,73,.3);}
+.chip-green{font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:20px;
+  background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.25);}
+.gps-box{margin-top:12px;background:rgba(57,211,83,.06);border:1px solid rgba(57,211,83,.2);
+  border-radius:10px;padding:10px 14px;font-size:.78rem;color:var(--green);font-weight:500;}
+.gps-box span{display:block;font-size:.72rem;color:var(--muted);font-weight:300;margin-top:2px;}
+.verbal-hint{margin-top:10px;background:rgba(227,179,65,.06);border:1px solid rgba(227,179,65,.2);
+  border-radius:10px;padding:10px 14px;font-size:.78rem;color:var(--yellow);}
+.verbal-hint strong{display:block;margin-bottom:3px;font-size:.8rem;}
+
+/* ── 🆘 PANIC ── */
+#panicBtn{width:100%;max-width:480px;
+  background:linear-gradient(135deg,#8b1a1a,#c0392b);
+  border:1px solid rgba(248,81,73,.4);border-radius:16px;padding:20px;
+  display:flex;align-items:center;gap:14px;cursor:pointer;font-family:inherit;
+  color:white;margin-bottom:10px;box-shadow:0 0 30px rgba(248,81,73,.2);
+  transition:all .4s;z-index:2;position:relative;overflow:hidden;
+  animation:fadeUp .5s .55s ease both;}
+#panicBtn.fired{background:linear-gradient(135deg,#1a4a1a,#27ae60)!important;
+  border-color:rgba(63,185,80,.4)!important;box-shadow:0 0 30px rgba(63,185,80,.2)!important;}
+.panic-icon{width:50px;height:50px;border-radius:14px;background:rgba(255,255,255,.15);
+  border:1px solid rgba(255,255,255,.2);display:grid;place-items:center;
+  flex-shrink:0;font-size:1.4rem;}
+.panic-text{flex:1;text-align:left;}
+.panic-title{font-size:.95rem;font-weight:700;}
+.panic-sub{font-size:.73rem;opacity:.75;margin-top:3px;display:block;}
+.panic-pulse{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.9);
+  animation:panicPulse 1s ease infinite;flex-shrink:0;}
+
+/* ── 📊 GEMELO ── */
+#twinPanel{width:100%;max-width:480px;background:var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:20px;
+  display:none;margin-bottom:10px;z-index:2;animation:fadeUp .4s ease both;}
+#twinPanel.visible{display:block;}
+.twin-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.twin-head h3{font-size:.95rem;font-weight:700;}
+.twin-live{display:flex;align-items:center;gap:5px;background:rgba(63,185,80,.1);
+  border:1px solid rgba(63,185,80,.25);color:var(--green);font-size:.65rem;
+  font-weight:600;padding:3px 10px;border-radius:20px;}
+.twin-live::before{content:'';width:6px;height:6px;border-radius:50%;
+  background:var(--green);animation:blink 1.5s ease infinite;}
+.twin-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+.twin-stat{background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 10px;text-align:center;}
+.twin-stat-n{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;line-height:1;}
+.twin-stat-l{font-size:.62rem;color:var(--muted);margin-top:4px;line-height:1.3;}
+.tl-label{font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.1em;margin-bottom:10px;}
+.tl-item{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;
+  border-radius:8px;background:var(--surface2);font-size:.8rem;margin-bottom:6px;}
+.tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.tl-body{flex:1;}
+.tl-title{font-weight:500;}
+.tl-detail{font-size:.7rem;color:var(--muted);margin-top:1px;}
+.tl-time{font-size:.68rem;color:var(--dim);flex-shrink:0;margin-top:2px;}
+.map-btn{width:100%;margin-top:12px;padding:10px;background:rgba(88,166,255,.1);
+  border:1px solid rgba(88,166,255,.25);border-radius:8px;font-family:inherit;
+  font-size:.8rem;font-weight:500;color:var(--blue);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s;}
+.map-btn:hover{background:rgba(88,166,255,.18);}
+
+/* ── 🤖 CHAT IA ── */
+#aiPanel{width:100%;max-width:480px;background:var(--surface);
+  border:1px solid rgba(188,140,255,.3);border-radius:16px;overflow:hidden;
+  display:none;margin-bottom:10px;z-index:2;animation:fadeUp .4s ease both;
+  box-shadow:0 0 30px rgba(188,140,255,.08);}
+#aiPanel.visible{display:block;}
+.ai-header{background:linear-gradient(135deg,#2d1b69,#1e0d3e);
+  border-bottom:1px solid rgba(188,140,255,.2);padding:14px 18px;
+  display:flex;align-items:center;gap:12px;}
+.ai-avatar-wrap{position:relative;}
+.ai-avatar{width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#5b21b6);display:grid;place-items:center;
+  font-size:1.1rem;border:2px solid rgba(188,140,255,.3);}
+.ai-online{position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:50%;
+  background:var(--green);border:2px solid var(--surface2);}
+.ai-name{font-size:.9rem;font-weight:600;color:white;}
+.ai-desc{font-size:.7rem;color:rgba(255,255,255,.5);margin-top:1px;}
+.ai-badge{font-size:.62rem;font-weight:600;background:rgba(188,140,255,.2);
+  border:1px solid rgba(188,140,255,.3);color:var(--purple);padding:3px 9px;border-radius:20px;}
+.chat-body{height:260px;overflow-y:auto;padding:14px;display:flex;flex-direction:column;
+  gap:8px;background:var(--bg);}
+.chat-body::-webkit-scrollbar{width:3px;}
+.chat-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.msg{max-width:88%;}
+.msg-ai{align-self:flex-start;}
+.msg-user{align-self:flex-end;}
+.bubble{padding:10px 14px;border-radius:16px;font-size:.83rem;line-height:1.5;}
+.msg-ai .bubble{background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);border-bottom-left-radius:4px;}
+.msg-user .bubble{background:linear-gradient(135deg,#5b21b6,#7c3aed);
+  color:white;border-bottom-right-radius:4px;}
+.msg-meta{font-size:.62rem;color:var(--dim);padding:2px 4px;margin-top:2px;}
+.msg-ai .msg-meta{text-align:left;}
+.msg-user .msg-meta{text-align:right;}
+.typing-wrap{display:flex;align-items:center;gap:4px;padding:10px 14px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:16px;
+  border-bottom-left-radius:4px;width:52px;align-self:flex-start;}
+.t-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);}
+.t-dot:nth-child(1){animation:tdot 1.2s 0s ease infinite;}
+.t-dot:nth-child(2){animation:tdot 1.2s .15s ease infinite;}
+.t-dot:nth-child(3){animation:tdot 1.2s .3s ease infinite;}
+.quick-wrap{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;
+  border-top:1px solid var(--border);background:var(--surface);}
+.qr-btn{padding:6px 12px;border-radius:20px;background:var(--surface2);
+  border:1px solid var(--border);font-size:.73rem;font-weight:500;color:var(--muted);
+  cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;}
+.qr-btn:hover{border-color:var(--purple);color:var(--purple);}
+.chat-input-row{display:flex;gap:8px;padding:12px 14px;
+  border-top:1px solid var(--border);background:var(--surface);}
+#chatIn{flex:1;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:20px;font-family:inherit;font-size:.83rem;color:var(--text);outline:none;
+  transition:border-color .2s;}
+#chatIn:focus{border-color:var(--purple);}
+.send-btn{width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,#5b21b6,#7c3aed);border:none;cursor:pointer;
+  display:grid;place-items:center;flex-shrink:0;}
+.send-btn svg{width:15px;height:15px;fill:white;}
+
+footer{margin-top:24px;font-size:.7rem;color:var(--dim);text-align:center;
+  line-height:1.8;position:relative;z-index:2;animation:fadeUp .5s .8s ease both;}
+footer strong{color:var(--blue);}
+
+/* ── ANIMACIONES ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes heartbeat{0%,100%{box-shadow:0 0 0 0 rgba(88,166,255,.3)}50%{box-shadow:0 0 0 14px rgba(88,166,255,0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes panicPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.6);opacity:.4}}
+@keyframes tdot{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    </div>
+    <span class="brand-name">Cuida<span>Me</span></span>
+  </div>
+  <div class="live-badge"><span class="live-dot"></span>SISTEMA ACTIVO</div>
+</header>
+
+<!-- CALM CARD -->
+<div class="calm-card">
+  <div class="calm-pulse">
+    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+  </div>
+  <h2>Estás bien,<br/><em>ya hay alguien contigo.</em></h2>
+  <p>Respira con calma. Una persona está aquí para ayudarte y tu familia será contactada muy pronto.</p>
+</div>
+
+<!-- SECCIÓN RESCATISTAS -->
+<div class="section-div" style="animation:fadeUp .5s .2s ease both"><span>¿Quién eres?</span></div>
+
+<!-- BOTÓN NIVEL 1 -->
+<button class="action-btn" style="animation:fadeUp .5s .25s ease both" onclick="abrirModalBasico()">
+  <div class="btn-ico" style="background:rgba(88,166,255,.15);border:1px solid rgba(88,166,255,.25)">👤</div>
+  <div class="btn-text">Soy una persona que quiere ayudar<span class="btn-sub">Ver info básica · Sin PIN requerido</span></div>
+  <span class="btn-chevron">›</span>
+</button>
+
+<!-- BOTÓN NIVEL 2 -->
+<button class="action-btn" style="animation:fadeUp .5s .3s ease both" onclick="abrirModalPin()">
+  <div class="btn-ico" style="background:rgba(248,129,102,.15);border:1px solid rgba(248,129,102,.25)">🛡️</div>
+  <div class="btn-text">Soy rescatista / paramédico / policía<span class="btn-sub">Acceso médico completo · Requiere PIN</span></div>
+  <span class="btn-chevron">›</span>
+</button>
+
+<!-- 🤖 IA -->
+<button class="action-btn" style="animation:fadeUp .5s .35s ease both" onclick="abrirIA()">
+  <div class="btn-ico" style="background:rgba(188,140,255,.15);border:1px solid rgba(188,140,255,.25)">🤖</div>
+  <div class="btn-text">Asistente IA de emergencia<span class="btn-sub">Guía inteligente paso a paso · Powered by IA</span></div>
+  <span class="btn-chevron">›</span>
+</button>
+
+<!-- 📊 GEMELO -->
+<button class="action-btn" style="animation:fadeUp .5s .4s ease both" onclick="abrirGemelo()">
+  <div class="btn-ico" style="background:rgba(57,211,83,.1);border:1px solid rgba(57,211,83,.2)">📊</div>
+  <div class="btn-text">Gemelo Digital del paciente<span class="btn-sub">Historial de escaneos · Ubicación en tiempo real</span></div>
+  <span class="btn-chevron">›</span>
+</button>
+
+<!-- GPS WARN -->
+<div id="gpsWarn">⚠️ Llamada bloqueada — activa el GPS primero<span>El botón se desbloquea cuando compartes tu ubicación.</span></div>
+
+<!-- LLAMAR -->
+<button class="action-btn" id="btnCall" style="animation:fadeUp .5s .45s ease both" onclick="makeCall()">
+  <div class="btn-ico" style="background:rgba(57,211,83,.1);border:1px solid rgba(57,211,83,.2)">📞</div>
+  <div class="btn-text">Llamar al familiar<span class="btn-sub" id="callSub">Requiere GPS activo para desbloquearse</span></div>
+  <span class="lock-pill locked" id="lockPill">🔒 BLOQUEADO</span>
+</button>
+
+<!-- SECCIÓN PÁNICO -->
+<div class="section-div" style="animation:fadeUp .5s .5s ease both"><span>Emergencia inmediata</span></div>
+
+<!-- 🆘 BOTÓN DE PÁNICO -->
+<button id="panicBtn" onclick="activarPanico()">
+  <div class="panic-icon" id="panicIcon">🆘</div>
+  <div class="panic-text">
+    <div class="panic-title" id="panicTitle">Botón de Pánico — Alerta Inmediata</div>
+    <span class="panic-sub" id="panicSub">Envía GPS + WhatsApp al familiar al instante · Sin pasos</span>
+  </div>
+  <div class="panic-pulse" id="panicPulse"></div>
+</button>
+
+<!-- PANEL BÁSICO -->
+<div class="info-panel" id="panelBasic">
+  <div class="panel-title">👤 Información básica</div>
+  <div class="info-row"><label>Nombre</label><value id="v-nombre">Juan Carlos Pérez</value></div>
+  <div class="info-row"><label>Edad</label><value id="v-edad">74 años</value></div>
+  <div class="info-row"><label>Condición</label><value id="v-condicion">Alzheimer moderado</value></div>
+  <div class="info-row"><label>Necesita</label><value>Regresar a casa con su familia</value></div>
+  <div class="gps-box">📍 Ubicación registrada<span id="gpsBasic">Obteniendo coordenadas...</span></div>
+  <div class="verbal-hint">
+    <strong>📞 Al llamar, el familiar preguntará:</strong>
+    "¿De qué color es la pulsera?" — Solo alguien frente al paciente puede responder.
+  </div>
+</div>
+
+<!-- PANEL RESCATISTA -->
+<div class="info-panel" id="panelRescue">
+  <div class="panel-title">🛡️ Información médica completa</div>
+  <div class="info-row"><label>Nombre</label><value>Juan Carlos Pérez</value></div>
+  <div class="info-row"><label>Edad</label><value>74 años</value></div>
+  <div class="info-row"><label>Condición</label><value>Alzheimer moderado</value></div>
+  <div class="info-row"><label>Alergias</label><value><span class="chip-red">⚠ Penicilina</span></value></div>
+  <div class="info-row"><label>Medicamentos</label><value>Donepezilo 10mg · Mañana</value></div>
+  <div class="info-row"><label>Sangre</label><value>O positivo</value></div>
+  <div class="info-row"><label>Médico</label><value>Dr. Ramírez · 987-000-111</value></div>
+  <div class="info-row"><label>Familiar</label><value>María Pérez (hija)</value></div>
+  <div class="info-row"><label>Acceso</label><value><span class="chip-green">✓ PIN verificado</span></value></div>
+  <div class="gps-box">📍 Ubicación enviada al familiar<span id="gpsRescue">Obteniendo coordenadas...</span></div>
+</div>
+
+<!-- 📊 GEMELO DIGITAL -->
+<div id="twinPanel">
+  <div class="twin-head">
+    <h3>📊 Gemelo Digital</h3>
+    <div class="twin-live">EN VIVO</div>
+  </div>
+  <div class="twin-stats">
+    <div class="twin-stat"><div class="twin-stat-n" style="color:#58a6ff" id="statScans">1</div><div class="twin-stat-l">Escaneos hoy</div></div>
+    <div class="twin-stat"><div class="twin-stat-n" style="color:#3fb950" id="statAlerts">0</div><div class="twin-stat-l">Alertas enviadas</div></div>
+    <div class="twin-stat"><div class="twin-stat-n" style="color:#f78166;font-size:.9rem" id="statTime">—</div><div class="twin-stat-l">Última actividad</div></div>
+  </div>
+  <div class="tl-label">Historial de actividad</div>
+  <div id="timeline"></div>
+  <button class="map-btn" onclick="verMapa()">📍 Ver ubicación en Google Maps</button>
+</div>
+
+<!-- 🤖 CHAT IA -->
+<div id="aiPanel">
+  <div class="ai-header">
+    <div class="ai-avatar-wrap">
+      <div class="ai-avatar">🤖</div>
+      <div class="ai-online"></div>
+    </div>
+    <div style="flex:1">
+      <div class="ai-name">Asistente CuidaMe</div>
+      <div class="ai-desc">Guía inteligente de emergencia · IA activa</div>
+    </div>
+    <span class="ai-badge">IA</span>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="quick-wrap" id="quickWrap"></div>
+  <div class="chat-input-row">
+    <input id="chatIn" placeholder="Escribe tu situación..." onkeydown="if(event.key==='Enter')enviarMsg()"/>
+    <button class="send-btn" onclick="enviarMsg()">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- MODAL BÁSICO -->
+<div class="overlay" id="ovBasic">
+  <div class="modal">
+    <h3>👋 Acceso de ayudante</h3>
+    <p>Registraremos tu ubicación GPS para alertar al familiar. Solo verás información básica.</p>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="cerrarModal('ovBasic')">Cancelar</button>
+      <button class="btn-blue" onclick="confirmarBasico()">Activar GPS y ver info</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PIN -->
+<div class="overlay" id="ovPin">
+  <div class="modal">
+    <h3>🔐 PIN de rescatista</h3>
+    <p>Ingresa el código de 4 dígitos que el familiar te dio por teléfono.</p>
+    <div class="pin-row" id="pinRow">
+      <input class="pin-d" id="p1" maxlength="1" type="password" inputmode="numeric" oninput="mvPin(0,this)" onkeydown="bkPin(0,event)"/>
+      <input class="pin-d" id="p2" maxlength="1" type="password" inputmode="numeric" oninput="mvPin(1,this)" onkeydown="bkPin(1,event)"/>
+      <input class="pin-d" id="p3" maxlength="1" type="password" inputmode="numeric" oninput="mvPin(2,this)" onkeydown="bkPin(2,event)"/>
+      <input class="pin-d" id="p4" maxlength="1" type="password" inputmode="numeric" oninput="mvPin(3,this)" onkeydown="bkPin(3,event)"/>
+    </div>
+    <div id="pinError">PIN incorrecto — pide el código al familiar.</div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="cerrarModal('ovPin');limpiarPin()">Cancelar</button>
+      <button class="btn-red" onclick="submitPin()">Verificar acceso</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Pulsera <strong>CuidaMe</strong> — Sistema de emergencia inteligente<br/>
+  IA · Gemelo Digital · Botón de Pánico · GPS activo<br/>
+  Proyecto EPT — Educación para el Trabajo
+</footer>
+
+<script>
+// ══════════════════════════════════════
+//  DATOS DEL PACIENTE
+// ══════════════════════════════════════
+const PAC = {
+  nombre:'Juan Carlos Pérez', edad:'74',
+  condicion:'Alzheimer moderado', alergias:'Penicilina',
+  meds:'Donepezilo 10mg en la mañana', sangre:'O positivo',
+  medico:'Dr. Ramírez', familiar:'María Pérez (hija)',
+  colorPulsera:'azul con franja naranja',
+  telefono:'51924854167'
+};
+const PIN = '7834';
+
+// ══════════════════════════════════════
+//  ESTADO
+// ══════════════════════════════════════
+let gpsOk = false;
+let coords = null;
+let scans = 1, alerts = 0;
+let tl = [{dot:'🔍',title:'QR escaneado',detail:'Sistema iniciado',color:'#58a6ff',t:hora()}];
+let chatHist = [];
+let iaStarted = false;
+let panicFired = false;
+
+// ══════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════
+function hora(){return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});}
+function fechaCompleta(){return new Date().toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'});}
+
+function showToast(msg,tipo='',dur=3500){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+tipo;
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+function addTL(dot,title,detail,color){
+  tl.unshift({dot,title,detail,color,t:hora()});
+  if(tl.length>6)tl.pop();
+  document.getElementById('statTime').textContent=hora();
+}
+
+function refTwin(){
+  document.getElementById('statScans').textContent=scans;
+  document.getElementById('statAlerts').textContent=alerts;
+  const c=document.getElementById('timeline');
+  c.innerHTML='';
+  tl.forEach(ev=>{
+    c.innerHTML+=`<div class="tl-item">
+      <div class="tl-dot" style="background:${ev.color}"></div>
+      <div class="tl-body"><div class="tl-title">${ev.dot} ${ev.title}</div>
+      <div class="tl-detail">${ev.detail}</div></div>
+      <div class="tl-time">${ev.t}</div></div>`;
+  });
+}
+
+// ══════════════════════════════════════
+//  WHATSAPP
+// ══════════════════════════════════════
+function enviarWhatsApp(c, tipo='panico'){
+  const emoji  = tipo==='panico' ? '🆘' : '📞';
+  const titulo = tipo==='panico' ? 'ALERTA DE PÁNICO — CuidaMe' : 'LLAMADA DE EMERGENCIA — CuidaMe';
+  const ubic   = c
+    ? `📍 Ubicación GPS: https://maps.google.com/?q=${c.lat},${c.lon}\nCoordenadas: ${c.lat}, ${c.lon}`
+    : '📍 Ubicación GPS: No disponible aún';
+  const msg=`${emoji} *${titulo}*
+
+👤 *Paciente:* ${PAC.nombre}
+🎂 *Edad:* ${PAC.edad} años
+🏥 *Condición:* ${PAC.condicion}
+⚠️ *Alergias:* ${PAC.alergias}
+💊 *Medicamentos:* ${PAC.meds}
+🩸 *Sangre:* ${PAC.sangre}
+
+${ubic}
+
+🕐 *Hora del aviso:* ${fechaCompleta()}
+
+_Mensaje enviado automáticamente por el sistema CuidaMe_`;
+  window.open(`https://wa.me/${PAC.telefono}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+
+// ══════════════════════════════════════
+//  GPS
+// ══════════════════════════════════════
+function pedirGPS(spanId){
+  if(!navigator.geolocation){
+    document.getElementById(spanId).textContent='GPS no disponible en este dispositivo';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    p=>{
+      const lat=p.coords.latitude.toFixed(5), lon=p.coords.longitude.toFixed(5);
+      coords={lat,lon}; gpsOk=true;
+      document.getElementById(spanId).textContent=`Lat:${lat} / Lon:${lon} — Enviado al familiar`;
+      desbloquearCall();
+      addTL('📍','GPS registrado',`${lat}, ${lon}`,'#3fb950');
+      alerts++; refTwin();
+    },
+    ()=>{
+      document.getElementById(spanId).textContent='GPS denegado — activa la ubicación';
+      document.getElementById('gpsWarn').classList.add('show');
+    }
+  );
+}
+
+function desbloquearCall(){
+  document.getElementById('btnCall').classList.remove('disabled');
+  const lp=document.getElementById('lockPill');
+  lp.textContent='✓ ACTIVO'; lp.className='lock-pill open';
+  document.getElementById('callSub').textContent='GPS registrado — Llamada segura habilitada';
+  document.getElementById('gpsWarn').classList.remove('show');
+}
+
+// ══════════════════════════════════════
+//  MODALES
+// ══════════════════════════════════════
+function cerrarModal(id){document.getElementById(id).classList.remove('show');}
+function abrirModalBasico(){document.getElementById('ovBasic').classList.add('show');}
+function abrirModalPin(){
+  document.getElementById('ovPin').classList.add('show');
+  setTimeout(()=>document.getElementById('p1').focus(),300);
+}
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');});
+});
+
+function confirmarBasico(){
+  cerrarModal('ovBasic');
+  const pb=document.getElementById('panelBasic');
+  pb.classList.add('visible');
+  pedirGPS('gpsBasic');
+  scans++; addTL('👤','Acceso básico activado',hora(),'#58a6ff'); refTwin();
+  document.getElementById('twinPanel').classList.add('visible');
+  setTimeout(()=>pb.scrollIntoView({behavior:'smooth'}),200);
+}
+
+// ── PIN ──
+const pids=['p1','p2','p3','p4'];
+function mvPin(i,el){
+  el.value=el.value.replace(/\D/g,'');
+  if(el.value&&i<3)document.getElementById(pids[i+1]).focus();
+  if(i===3&&el.value)submitPin();
+}
+function bkPin(i,e){
+  if(e.key==='Backspace'&&!document.getElementById(pids[i]).value&&i>0)
+    document.getElementById(pids[i-1]).focus();
+}
+function limpiarPin(){
+  pids.forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pinError').classList.remove('show');
+  document.querySelectorAll('.pin-d').forEach(d=>d.classList.remove('err'));
+}
+function submitPin(){
+  const p=pids.map(id=>document.getElementById(id).value).join('');
+  if(p===PIN){
+    cerrarModal('ovPin'); limpiarPin();
+    const pr=document.getElementById('panelRescue');
+    document.getElementById('panelBasic').classList.remove('visible');
+    pr.classList.add('visible');
+    pedirGPS('gpsRescue');
+    scans++; alerts++;
+    addTL('🛡️','Rescatista verificado',hora(),'#f78166'); refTwin();
+    document.getElementById('twinPanel').classList.add('visible');
+    showToast('✅ Acceso de rescatista verificado','ok');
+    setTimeout(()=>pr.scrollIntoView({behavior:'smooth'}),200);
+  } else {
+    document.getElementById('pinError').classList.add('show');
+    document.querySelectorAll('.pin-d').forEach(d=>d.classList.add('err'));
+    document.getElementById('pinRow').style.animation='shake .35s ease';
+    setTimeout(()=>{
+      document.getElementById('pinRow').style.animation='';
+      limpiarPin();
+      document.getElementById('p1').focus();
+    },400);
+    showToast('❌ PIN incorrecto','err');
+  }
+}
+
+// ── LLAMADA ──
+function makeCall(){
+  if(!gpsOk){document.getElementById('gpsWarn').classList.add('show');return;}
+  enviarWhatsApp(coords,'llamada');
+  setTimeout(()=>window.location.href=`tel:+${PAC.telefono}`,1500);
+}
+
+// ══════════════════════════════════════
+//  🆘 PÁNICO
+// ══════════════════════════════════════
+function activarPanico(){
+  if(panicFired)return;
+  panicFired=true;
+  const btn=document.getElementById('panicBtn');
+  btn.classList.add('fired');
+  document.getElementById('panicIcon').textContent='✅';
+  document.getElementById('panicTitle').textContent='Alerta enviada al familiar';
+  document.getElementById('panicSub').textContent='WhatsApp enviado · GPS registrando...';
+  document.getElementById('panicPulse').style.display='none';
+  alerts++; scans++;
+  addTL('🆘','PÁNICO ACTIVADO',hora(),'#f85149'); refTwin();
+  document.getElementById('twinPanel').classList.add('visible');
+  showToast('🆘 Alerta de pánico enviada por WhatsApp','err',5000);
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      p=>{
+        const lat=p.coords.latitude.toFixed(5),lon=p.coords.longitude.toFixed(5);
+        coords={lat,lon}; gpsOk=true;
+        desbloquearCall();
+        addTL('📍','GPS de pánico',`${lat},${lon}`,'#f85149'); refTwin();
+        enviarWhatsApp({lat,lon},'panico');
+        showToast(`📍 WhatsApp enviado con ubicación: ${lat}, ${lon}`,'ok',5000);
+      },
+      ()=>{
+        enviarWhatsApp(null,'panico');
+        showToast('⚠️ GPS no disponible — WhatsApp enviado sin ubicación','',4000);
+      }
+    );
+  } else {
+    enviarWhatsApp(null,'panico');
+  }
+}
+
+// ══════════════════════════════════════
+//  📊 GEMELO
+// ══════════════════════════════════════
+function abrirGemelo(){
+  document.getElementById('twinPanel').classList.add('visible');
+  setTimeout(()=>document.getElementById('twinPanel').scrollIntoView({behavior:'smooth'}),100);
+}
+function verMapa(){
+  if(coords)window.open(`https://maps.google.com/?q=${coords.lat},${coords.lon}`,'_blank');
+  else showToast('⚠️ Activa el GPS primero','',3000);
+}
+refTwin();
+
+// ══════════════════════════════════════
+//  🤖 IA
+// ══════════════════════════════════════
+function abrirIA(){
+  const panel=document.getElementById('aiPanel');
+  panel.classList.add('visible');
+  if(!iaStarted){
+    iaStarted=true;
+    setTimeout(()=>{
+      addAI(`Hola 👋 Soy el asistente de emergencia **CuidaMe**.\n\nDetecté que encontraste a **${PAC.nombre}**, de ${PAC.edad} años, con **${PAC.condicion}**.\n\n¿En qué situación lo encontraste?`);
+      setQR(['Está perdido en la calle','Parece confundido o asustado','Está herido','No responde']);
+    },400);
+  }
+  setTimeout(()=>panel.scrollIntoView({behavior:'smooth'}),200);
+}
+
+function addAI(txt){
+  const cb=document.getElementById('chatBody');
+  const typing=document.createElement('div');
+  typing.className='typing-wrap';
+  typing.innerHTML='<div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>';
+  cb.appendChild(typing); cb.scrollTop=cb.scrollHeight;
+  setTimeout(()=>{
+    typing.remove();
+    const d=document.createElement('div'); d.className='msg msg-ai';
+    const html=txt.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br/>');
+    d.innerHTML=`<div class="bubble">${html}</div><div class="msg-meta">${hora()}</div>`;
+    cb.appendChild(d); cb.scrollTop=cb.scrollHeight;
+    chatHist.push({role:'assistant',content:txt});
+  },1200);
+}
+
+function addUser(txt){
+  const cb=document.getElementById('chatBody');
+  const d=document.createElement('div'); d.className='msg msg-user';
+  d.innerHTML=`<div class="bubble">${txt}</div><div class="msg-meta">${hora()}</div>`;
+  cb.appendChild(d); cb.scrollTop=cb.scrollHeight;
+  chatHist.push({role:'user',content:txt});
+}
+
+function setQR(opts){
+  const qw=document.getElementById('quickWrap'); qw.innerHTML='';
+  opts.forEach(o=>{
+    const b=document.createElement('button'); b.className='qr-btn'; b.textContent=o;
+    b.onclick=()=>{qw.innerHTML=''; addUser(o); obtenerRespuestaIA(o);};
+    qw.appendChild(b);
+  });
+}
+
+function enviarMsg(){
+  const inp=document.getElementById('chatIn');
+  const txt=inp.value.trim(); if(!txt)return;
+  inp.value=''; document.getElementById('quickWrap').innerHTML='';
+  addUser(txt); obtenerRespuestaIA(txt);
+}
+
+async function obtenerRespuestaIA(msg){
+  const sys=`Eres el asistente de emergencia CuidaMe. Ayudas a quien encontró a ${PAC.nombre}, ${PAC.edad} años, con ${PAC.condicion}.
+DATOS: Alergias: ${PAC.alergias}. Medicamentos: ${PAC.meds}. Sangre: ${PAC.sangre}. Médico: ${PAC.medico}. Familiar: ${PAC.familiar}.
+REGLAS: Español simple y calmado. Máximo 3 pasos numerados. Usa **negritas** para info crítica. Si hay emergencia médica di que llamen al 105 PRIMERO. Para calmar: usa el nombre "${PAC.nombre}", habla despacio, no lo contradigas. Al final SIEMPRE incluye [QR:opcion1|opcion2|opcion3]. Nunca reveles el PIN.`;
+
+  // Mostrar typing
+  const cb=document.getElementById('chatBody');
+  const typing=document.createElement('div');
+  typing.className='typing-wrap';
+  typing.innerHTML='<div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>';
+  cb.appendChild(typing); cb.scrollTop=cb.scrollHeight;
+
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:500,
+        system:sys,
+        messages:[...chatHist.slice(-6),{role:'user',content:msg}]
+      })
+    });
+    const d=await r.json();
+    let rep=d.content?.[0]?.text||'Sin conexión. Quédate con el paciente y llama al **105** si es urgente.';
+    typing.remove();
+    const m=rep.match(/\[QR:(.*?)\]/);
+    if(m){
+      const opts=m[1].split('|').map(o=>o.trim());
+      rep=rep.replace(/\[QR:.*?\]/,'').trim();
+      setTimeout(()=>setQR(opts),1300);
+    } else {
+      setTimeout(()=>setQR(['¿Qué hago ahora?','Cómo calmo al paciente','Llamar al familiar']),1300);
+    }
+    addAI(rep);
+    addTL('🤖','IA consultada',hora(),'#bc8cff'); refTwin();
+  }catch(e){
+    typing.remove();
+    addAI(`Sin conexión. Recuerda:\n1. Quédate con **${PAC.nombre}**\n2. Usa el botón de llamada\n3. Si es urgente llama al **105**`);
+    setQR(['Cómo calmo al paciente','Llamar al familiar','Llamar al 105']);
+  }
+}
+</script>
+</body>
+</html>
